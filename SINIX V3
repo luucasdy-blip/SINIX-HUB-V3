@@ -1,1 +1,1442 @@
-loadstring(game:HttpGet('https://pastebin.com/raw/ZNjr6XTL'))()
+local player = game.Players.LocalPlayer
+local TweenService     = game:GetService("TweenService")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local KEY = "SINIX"
+
+local baseColors = {
+    background = Color3.fromRGB(10, 10, 16),
+    frame      = Color3.fromRGB(20, 20, 30),
+    button     = Color3.fromRGB(38, 38, 56),
+    buttonHov  = Color3.fromRGB(55, 55, 80),
+    text       = Color3.fromRGB(230, 230, 255),
+    subtext    = Color3.fromRGB(140, 140, 170),
+    error      = Color3.fromRGB(220, 70, 70),
+    success    = Color3.fromRGB(70, 220, 120),
+    accent     = Color3.fromRGB(130, 100, 255),
+    warning    = Color3.fromRGB(200, 160, 50),
+}
+
+-- ─── RAINBOW ENGINE ───────────────────────────────────────────────────────────
+
+local hue = 0
+local function getRainbowColor()
+    hue = (hue + 1) % 360
+    return Color3.fromHSV(hue / 360, 0.85, 1)
+end
+
+local rainbowObjects = {}
+RunService.Heartbeat:Connect(function()
+    local color = getRainbowColor()
+    for i = #rainbowObjects, 1, -1 do
+        local e = rainbowObjects[i]
+        if e.obj and e.obj.Parent then
+            e.obj[e.prop] = color
+        else
+            table.remove(rainbowObjects, i)
+        end
+    end
+end)
+
+local function addRainbow(obj, prop)
+    table.insert(rainbowObjects, { obj = obj, prop = prop })
+end
+
+local function removeRainbow(targetObj, targetProp)
+    for i = #rainbowObjects, 1, -1 do
+        local e = rainbowObjects[i]
+        if e.obj == targetObj and e.prop == targetProp then
+            table.remove(rainbowObjects, i)
+        end
+    end
+end
+
+-- ─── PULSE ENGINE ─────────────────────────────────────────────────────────────
+
+local pulseObjects = {}
+local pulseT = 0
+RunService.Heartbeat:Connect(function(dt)
+    pulseT = pulseT + dt * 2
+    local thickness = 2 + math.sin(pulseT) * 1.5
+    for i = #pulseObjects, 1, -1 do
+        local s = pulseObjects[i]
+        if s and s.Parent then
+            s.Thickness = thickness
+        else
+            table.remove(pulseObjects, i)
+        end
+    end
+end)
+
+local function addPulse(stroke)
+    table.insert(pulseObjects, stroke)
+end
+
+-- ─── HOVER SCALE ──────────────────────────────────────────────────────────────
+
+local function addHoverScale(obj, scaleUp)
+    scaleUp = scaleUp or 1.05
+    local scale = Instance.new("UIScale")
+    scale.Scale  = 1
+    scale.Parent = obj
+    obj.MouseEnter:Connect(function()
+        TweenService:Create(scale,
+            TweenInfo.new(0.14, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { Scale = scaleUp }):Play()
+    end)
+    obj.MouseLeave:Connect(function()
+        TweenService:Create(scale,
+            TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Scale = 1.0 }):Play()
+    end)
+end
+
+-- ─── RIPPLE ───────────────────────────────────────────────────────────────────
+
+local function addRipple(btn)
+    btn.MouseButton1Click:Connect(function()
+        local ripple = Instance.new("Frame")
+        ripple.Size                   = UDim2.new(0, 0, 0, 0)
+        ripple.AnchorPoint            = Vector2.new(0.5, 0.5)
+        ripple.Position               = UDim2.new(0.5, 0, 0.5, 0)
+        ripple.BackgroundColor3       = Color3.fromRGB(255, 255, 255)
+        ripple.BackgroundTransparency = 0.65
+        ripple.BorderSizePixel        = 0
+        ripple.ZIndex                 = btn.ZIndex + 2
+        ripple.Parent                 = btn
+        local rc = Instance.new("UICorner")
+        rc.CornerRadius = UDim.new(1, 0)
+        rc.Parent       = ripple
+        local expand = TweenService:Create(ripple,
+            TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Size = UDim2.new(2.5, 0, 2.5, 0), BackgroundTransparency = 1 })
+        expand:Play()
+        expand.Completed:Connect(function() ripple:Destroy() end)
+    end)
+end
+
+-- ─── RAINBOW HOVER ────────────────────────────────────────────────────────────
+
+local function makeRainbowHover(button)
+    button.MouseEnter:Connect(function()
+        task.spawn(function()
+            while button:IsMouseOver() and button.Parent do
+                button.BackgroundColor3 = getRainbowColor()
+                task.wait(0.03)
+            end
+            if button and button.Parent then
+                button.BackgroundColor3 = baseColors.button
+            end
+        end)
+    end)
+    button.MouseLeave:Connect(function()
+        if button and button.Parent then
+            button.BackgroundColor3 = baseColors.button
+        end
+    end)
+    addHoverScale(button)
+    addRipple(button)
+end
+
+-- ─── TOAST ────────────────────────────────────────────────────────────────────
+
+local toastQueue   = {}
+local toastRunning = false
+local ScreenGui    -- forward ref, defined below
+
+local function showToast(message, color)
+    table.insert(toastQueue, { msg = message, col = color or baseColors.success })
+    if toastRunning then return end
+    toastRunning = true
+    task.spawn(function()
+        while #toastQueue > 0 do
+            local entry = table.remove(toastQueue, 1)
+            local toast = Instance.new("Frame")
+            toast.Size                   = UDim2.new(0, 0, 0, 50)
+            toast.Position               = UDim2.new(0.5, 0, 1, -70)
+            toast.AnchorPoint            = Vector2.new(0.5, 1)
+            toast.BackgroundColor3       = entry.col
+            toast.BackgroundTransparency = 0.1
+            toast.BorderSizePixel        = 0
+            toast.ZIndex                 = 60
+            toast.Parent                 = ScreenGui
+
+            local tCorner = Instance.new("UICorner")
+            tCorner.CornerRadius = UDim.new(0, 10)
+            tCorner.Parent       = toast
+
+            -- Icon strip left
+            local strip = Instance.new("Frame")
+            strip.Size             = UDim2.new(0, 4, 1, 0)
+            strip.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            strip.BackgroundTransparency = 0.3
+            strip.BorderSizePixel  = 0
+            strip.ZIndex           = 61
+            strip.Parent           = toast
+            local sc = Instance.new("UICorner")
+            sc.CornerRadius = UDim.new(0, 4)
+            sc.Parent = strip
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size                   = UDim2.new(1, -24, 1, 0)
+            lbl.Position               = UDim2.new(0, 14, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Font                   = Enum.Font.GothamBold
+            lbl.TextSize               = 15
+            lbl.TextColor3             = Color3.fromRGB(255, 255, 255)
+            lbl.TextXAlignment         = Enum.TextXAlignment.Left
+            lbl.Text                   = entry.msg
+            lbl.ZIndex                 = 62
+            lbl.Parent                 = toast
+
+            TweenService:Create(toast,
+                TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                { Size = UDim2.new(0, 360, 0, 50) }):Play()
+            task.wait(2.8)
+            local out = TweenService:Create(toast,
+                TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+                { Size = UDim2.new(0, 0, 0, 50), BackgroundTransparency = 1 })
+            out:Play()
+            out.Completed:Wait()
+            toast:Destroy()
+            task.wait(0.08)
+        end
+        toastRunning = false
+    end)
+end
+
+-- ─── PARTICLES ────────────────────────────────────────────────────────────────
+
+local function spawnParticles(parent)
+    for i = 1, 22 do
+        local p = Instance.new("Frame")
+        local size = math.random(4, 12)
+        p.Size                   = UDim2.new(0, size, 0, size)
+        p.Position               = UDim2.new(0.5, 0, 0.5, 0)
+        p.AnchorPoint            = Vector2.new(0.5, 0.5)
+        p.BackgroundColor3       = Color3.fromHSV(math.random(), 1, 1)
+        p.BackgroundTransparency = 0
+        p.BorderSizePixel        = 0
+        p.ZIndex                 = 20
+        p.Parent                 = parent
+        local pc = Instance.new("UICorner")
+        pc.CornerRadius = UDim.new(1, 0)
+        pc.Parent = p
+        local angle = (i / 22) * math.pi * 2 + math.random() * 0.5
+        local dist  = math.random(80, 240)
+        local tx    = math.cos(angle) * dist
+        local ty    = math.sin(angle) * dist
+        local tween = TweenService:Create(p,
+            TweenInfo.new(0.7 + math.random() * 0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { Position = UDim2.new(0.5, tx, 0.5, ty), BackgroundTransparency = 1, Size = UDim2.new(0,0,0,0) })
+        tween:Play()
+        tween.Completed:Connect(function() p:Destroy() end)
+    end
+end
+
+-- ─── SCREENGUI ────────────────────────────────────────────────────────────────
+
+ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name           = "SinixOnTop"
+ScreenGui.ResetOnSpawn   = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent         = player:WaitForChild("PlayerGui")
+
+-- ─── HELPER: MAKE SHADOW ──────────────────────────────────────────────────────
+
+local function makeShadow(parent, offset, transparency)
+    local shadow = Instance.new("ImageLabel")
+    shadow.Size                   = UDim2.new(1, offset, 1, offset)
+    shadow.Position               = UDim2.new(0, offset/2, 0, offset/2)
+    shadow.AnchorPoint            = Vector2.new(0.5, 0.5)
+    shadow.Position               = UDim2.new(0.5, 0, 0.5, offset/2)
+    shadow.BackgroundTransparency = 1
+    shadow.Image                  = "rbxassetid://6014261993"
+    shadow.ImageColor3            = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency      = transparency or 0.6
+    shadow.ScaleType              = Enum.ScaleType.Slice
+    shadow.SliceCenter            = Rect.new(49, 49, 450, 450)
+    shadow.ZIndex                 = parent.ZIndex - 1
+    shadow.Parent                 = parent.Parent
+    return shadow
+end
+
+-- ─── LOGIN FRAME ──────────────────────────────────────────────────────────────
+
+local LoginFrame = Instance.new("Frame")
+LoginFrame.Size                   = UDim2.new(0, 320, 0, 220)
+LoginFrame.Position               = UDim2.new(0.5, 0, 0.5, 0)
+LoginFrame.AnchorPoint            = Vector2.new(0.5, 0.5)
+LoginFrame.BackgroundColor3       = baseColors.frame
+LoginFrame.BorderSizePixel        = 0
+LoginFrame.ZIndex                 = 2
+LoginFrame.BackgroundTransparency = 1
+LoginFrame.Parent                 = ScreenGui
+
+local lgGrad = Instance.new("UIGradient")
+lgGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(30, 28, 50)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(16, 16, 26)),
+})
+lgGrad.Rotation = 135
+lgGrad.Parent   = LoginFrame
+
+local lgCorner = Instance.new("UICorner")
+lgCorner.CornerRadius = UDim.new(0, 14)
+lgCorner.Parent       = LoginFrame
+
+local lgStroke = Instance.new("UIStroke")
+lgStroke.Thickness = 2
+lgStroke.Parent    = LoginFrame
+addRainbow(lgStroke, "Color")
+addPulse(lgStroke)
+
+-- Logo accent bar top
+local lgTopBar = Instance.new("Frame")
+lgTopBar.Size             = UDim2.new(0.6, 0, 0, 3)
+lgTopBar.Position         = UDim2.new(0.2, 0, 0, 0)
+lgTopBar.BorderSizePixel  = 0
+lgTopBar.ZIndex           = 4
+lgTopBar.Parent           = LoginFrame
+addRainbow(lgTopBar, "BackgroundColor3")
+local lgTopBarCorner = Instance.new("UICorner")
+lgTopBarCorner.CornerRadius = UDim.new(0, 2)
+lgTopBarCorner.Parent = lgTopBar
+
+local lgTitle = Instance.new("TextLabel")
+lgTitle.Size                   = UDim2.new(1, -40, 0, 48)
+lgTitle.Position               = UDim2.new(0, 0, 0, 8)
+lgTitle.BackgroundTransparency = 1
+lgTitle.Font                   = Enum.Font.GothamBold
+lgTitle.TextSize               = 26
+lgTitle.TextColor3             = baseColors.text
+lgTitle.Text                   = "🔐  SinixOnTop"
+lgTitle.ZIndex                 = 3
+lgTitle.Parent                 = LoginFrame
+addRainbow(lgTitle, "TextColor3")
+
+local lgVersion = Instance.new("TextLabel")
+lgVersion.Size                   = UDim2.new(1, -40, 0, 18)
+lgVersion.Position               = UDim2.new(0, 16, 0, 48)
+lgVersion.BackgroundTransparency = 1
+lgVersion.Font                   = Enum.Font.Gotham
+lgVersion.TextSize               = 12
+lgVersion.TextColor3             = baseColors.subtext
+lgVersion.Text                   = "v3.1  —  clé : SINIX"
+lgVersion.TextXAlignment         = Enum.TextXAlignment.Left
+lgVersion.ZIndex                 = 3
+lgVersion.Parent                 = LoginFrame
+
+-- Input wrapper with icon
+local inputWrapper = Instance.new("Frame")
+inputWrapper.Size             = UDim2.new(0.88, 0, 0, 40)
+inputWrapper.Position         = UDim2.new(0.06, 0, 0, 78)
+inputWrapper.BackgroundColor3 = baseColors.button
+inputWrapper.BorderSizePixel  = 0
+inputWrapper.ZIndex           = 3
+inputWrapper.Parent           = LoginFrame
+local iwCorner = Instance.new("UICorner")
+iwCorner.CornerRadius = UDim.new(0, 8)
+iwCorner.Parent = inputWrapper
+local iwStroke = Instance.new("UIStroke")
+iwStroke.Thickness = 1.5
+iwStroke.Parent    = inputWrapper
+addRainbow(iwStroke, "Color")
+
+local lockIcon = Instance.new("TextLabel")
+lockIcon.Size                   = UDim2.new(0, 30, 1, 0)
+lockIcon.Position               = UDim2.new(0, 0, 0, 0)
+lockIcon.BackgroundTransparency = 1
+lockIcon.Font                   = Enum.Font.GothamBold
+lockIcon.TextSize               = 16
+lockIcon.TextColor3             = baseColors.subtext
+lockIcon.Text                   = "🔑"
+lockIcon.ZIndex                 = 4
+lockIcon.Parent                 = inputWrapper
+
+local inputBox = Instance.new("TextBox")
+inputBox.Size             = UDim2.new(1, -36, 1, 0)
+inputBox.Position         = UDim2.new(0, 30, 0, 0)
+inputBox.PlaceholderText  = "Entrer la clé..."
+inputBox.PlaceholderColor3 = baseColors.subtext
+inputBox.Font             = Enum.Font.GothamBold
+inputBox.TextSize         = 16
+inputBox.TextColor3       = baseColors.text
+inputBox.BackgroundTransparency = 1
+inputBox.BorderSizePixel  = 0
+inputBox.ClearTextOnFocus = false
+inputBox.ZIndex           = 4
+inputBox.Parent           = inputWrapper
+
+-- Focus glow on input
+inputBox.Focused:Connect(function()
+    TweenService:Create(iwStroke,
+        TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+        { Thickness = 2.5 }):Play()
+end)
+inputBox.FocusLost:Connect(function()
+    TweenService:Create(iwStroke,
+        TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+        { Thickness = 1.5 }):Play()
+end)
+
+local errorLabel = Instance.new("TextLabel")
+errorLabel.Size                   = UDim2.new(1, 0, 0, 18)
+errorLabel.Position               = UDim2.new(0, 0, 0, 122)
+errorLabel.BackgroundTransparency = 1
+errorLabel.Font                   = Enum.Font.GothamSemibold
+errorLabel.TextSize               = 12
+errorLabel.TextColor3             = baseColors.error
+errorLabel.Text                   = ""
+errorLabel.ZIndex                 = 3
+errorLabel.Parent                 = LoginFrame
+
+local typingLabel = Instance.new("TextLabel")
+typingLabel.Size                   = UDim2.new(1, 0, 0, 18)
+typingLabel.Position               = UDim2.new(0, 0, 0, 122)
+typingLabel.BackgroundTransparency = 1
+typingLabel.Font                   = Enum.Font.GothamSemibold
+typingLabel.TextSize               = 12
+typingLabel.TextColor3             = baseColors.success
+typingLabel.Text                   = ""
+typingLabel.ZIndex                 = 4
+typingLabel.Parent                 = LoginFrame
+
+-- Valider button
+local loginButton = Instance.new("TextButton")
+loginButton.Size             = UDim2.new(0.88, 0, 0, 40)
+loginButton.Position         = UDim2.new(0.06, 0, 0, 148)
+loginButton.BackgroundColor3 = baseColors.button
+loginButton.BorderSizePixel  = 0
+loginButton.Font             = Enum.Font.GothamBold
+loginButton.TextSize         = 16
+loginButton.TextColor3       = Color3.fromRGB(255, 255, 255)
+loginButton.Text             = "✅  Valider l'accès"
+loginButton.AutoButtonColor  = false
+loginButton.ZIndex           = 3
+loginButton.ClipsDescendants = true
+loginButton.Parent           = LoginFrame
+makeRainbowHover(loginButton)
+local lbCorner = Instance.new("UICorner")
+lbCorner.CornerRadius = UDim.new(0, 8)
+lbCorner.Parent       = loginButton
+
+local closeLoginBtn = Instance.new("TextButton")
+closeLoginBtn.Size             = UDim2.new(0, 28, 0, 28)
+closeLoginBtn.Position         = UDim2.new(1, -32, 0, 6)
+closeLoginBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeLoginBtn.BorderSizePixel  = 0
+closeLoginBtn.Font             = Enum.Font.GothamBold
+closeLoginBtn.TextSize         = 18
+closeLoginBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+closeLoginBtn.Text             = "×"
+closeLoginBtn.AutoButtonColor  = false
+closeLoginBtn.ZIndex           = 5
+closeLoginBtn.ClipsDescendants = true
+closeLoginBtn.Parent           = LoginFrame
+addHoverScale(closeLoginBtn)
+addRipple(closeLoginBtn)
+local clCorner = Instance.new("UICorner")
+clCorner.CornerRadius = UDim.new(0, 6)
+clCorner.Parent       = closeLoginBtn
+closeLoginBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+local function openLoginFrameAnimation()
+    LoginFrame.Size                   = UDim2.new(0, 0, 0, 0)
+    LoginFrame.BackgroundTransparency = 1
+    TweenService:Create(LoginFrame,
+        TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        { Size = UDim2.new(0, 320, 0, 220) }):Play()
+    TweenService:Create(LoginFrame,
+        TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        { BackgroundTransparency = 0 }):Play()
+end
+
+local cleared = false
+inputBox.Focused:Connect(function()
+    if not cleared then inputBox.Text = "" cleared = true end
+end)
+
+-- ─── MAIN FRAME ───────────────────────────────────────────────────────────────
+
+local toggleKey    = Enum.KeyCode.RightShift
+local menuOpen     = false
+local menuUnlocked = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size                   = UDim2.new(0, 740, 0, 520)
+MainFrame.Position               = UDim2.new(0.5, 0, 0.5, 0)
+MainFrame.AnchorPoint            = Vector2.new(0.5, 0.5)
+MainFrame.BackgroundColor3       = baseColors.frame
+MainFrame.BorderSizePixel        = 0
+MainFrame.ClipsDescendants       = true
+MainFrame.Active                 = true
+MainFrame.Draggable              = true
+MainFrame.BackgroundTransparency = 1
+MainFrame.Visible                = false
+MainFrame.Parent                 = ScreenGui
+
+local mfGrad = Instance.new("UIGradient")
+mfGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,   Color3.fromRGB(22, 20, 36)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(16, 16, 26)),
+    ColorSequenceKeypoint.new(1,   Color3.fromRGB(10, 10, 18)),
+})
+mfGrad.Rotation = 145
+mfGrad.Parent   = MainFrame
+
+local mfCorner = Instance.new("UICorner")
+mfCorner.CornerRadius = UDim.new(0, 16)
+mfCorner.Parent       = MainFrame
+
+local mfStroke = Instance.new("UIStroke")
+mfStroke.Thickness = 2.5
+mfStroke.Parent    = MainFrame
+addRainbow(mfStroke, "Color")
+addPulse(mfStroke)
+
+-- ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size             = UDim2.new(0, 160, 1, 0)
+Sidebar.BackgroundColor3 = Color3.fromRGB(13, 13, 20)
+Sidebar.BorderSizePixel  = 0
+Sidebar.ZIndex           = 10
+Sidebar.Parent           = MainFrame
+
+local sbGrad = Instance.new("UIGradient")
+sbGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(18, 16, 30)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 10, 16)),
+})
+sbGrad.Rotation = 90
+sbGrad.Parent   = Sidebar
+
+-- Sidebar right border
+local sbBorder = Instance.new("Frame")
+sbBorder.Size             = UDim2.new(0, 1, 1, 0)
+sbBorder.Position         = UDim2.new(1, -1, 0, 0)
+sbBorder.BackgroundColor3 = baseColors.accent
+sbBorder.BorderSizePixel  = 0
+sbBorder.ZIndex           = 11
+sbBorder.Parent           = Sidebar
+addRainbow(sbBorder, "BackgroundColor3")
+
+-- Sidebar logo area
+local sbLogo = Instance.new("TextLabel")
+sbLogo.Size                   = UDim2.new(1, 0, 0, 60)
+sbLogo.Position               = UDim2.new(0, 0, 0, 0)
+sbLogo.BackgroundTransparency = 1
+sbLogo.Font                   = Enum.Font.GothamBold
+sbLogo.TextSize               = 18
+sbLogo.TextColor3             = baseColors.text
+sbLogo.Text                   = "✦ Sinix"
+sbLogo.ZIndex                 = 11
+sbLogo.Parent                 = Sidebar
+addRainbow(sbLogo, "TextColor3")
+
+local sbLogoSub = Instance.new("TextLabel")
+sbLogoSub.Size                   = UDim2.new(1, 0, 0, 16)
+sbLogoSub.Position               = UDim2.new(0, 0, 0, 40)
+sbLogoSub.BackgroundTransparency = 1
+sbLogoSub.Font                   = Enum.Font.Gotham
+sbLogoSub.TextSize               = 11
+sbLogoSub.TextColor3             = baseColors.subtext
+sbLogoSub.Text                   = "V3.1  OnTop"
+sbLogoSub.ZIndex                 = 11
+sbLogoSub.Parent                 = Sidebar
+
+-- Sidebar separator
+local sbSep = Instance.new("Frame")
+sbSep.Size             = UDim2.new(0.8, 0, 0, 1)
+sbSep.Position         = UDim2.new(0.1, 0, 0, 62)
+sbSep.BackgroundColor3 = baseColors.button
+sbSep.BorderSizePixel  = 0
+sbSep.ZIndex           = 11
+sbSep.Parent           = Sidebar
+addRainbow(sbSep, "BackgroundColor3")
+
+-- Sidebar nav list
+local SidebarNav = Instance.new("Frame")
+SidebarNav.Size                   = UDim2.new(1, 0, 1, -72)
+SidebarNav.Position               = UDim2.new(0, 0, 0, 72)
+SidebarNav.BackgroundTransparency = 1
+SidebarNav.ZIndex                 = 10
+SidebarNav.Parent                 = Sidebar
+
+local sbNavLayout = Instance.new("UIListLayout")
+sbNavLayout.Padding   = UDim.new(0, 4)
+sbNavLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sbNavLayout.Parent    = SidebarNav
+
+local sbNavPad = Instance.new("UIPadding")
+sbNavPad.PaddingLeft   = UDim.new(0, 8)
+sbNavPad.PaddingRight  = UDim.new(0, 8)
+sbNavPad.PaddingTop    = UDim.new(0, 6)
+sbNavPad.Parent        = SidebarNav
+
+-- Ping indicator in sidebar bottom
+local sbPingWrapper = Instance.new("Frame")
+sbPingWrapper.Size             = UDim2.new(1, 0, 0, 36)
+sbPingWrapper.Position         = UDim2.new(0, 0, 1, -40)
+sbPingWrapper.BackgroundTransparency = 1
+sbPingWrapper.ZIndex           = 11
+sbPingWrapper.Parent           = Sidebar
+
+local pingDot = Instance.new("Frame")
+pingDot.Size             = UDim2.new(0, 8, 0, 8)
+pingDot.Position         = UDim2.new(0, 14, 0.5, -4)
+pingDot.BackgroundColor3 = baseColors.success
+pingDot.BorderSizePixel  = 0
+pingDot.ZIndex           = 12
+pingDot.Parent           = sbPingWrapper
+local pdCorner = Instance.new("UICorner")
+pdCorner.CornerRadius = UDim.new(1, 0)
+pdCorner.Parent       = pingDot
+
+local pingLabel = Instance.new("TextLabel")
+pingLabel.Size                   = UDim2.new(1, -28, 1, 0)
+pingLabel.Position               = UDim2.new(0, 28, 0, 0)
+pingLabel.BackgroundTransparency = 1
+pingLabel.Font                   = Enum.Font.Gotham
+pingLabel.TextSize               = 12
+pingLabel.TextColor3             = baseColors.subtext
+pingLabel.TextXAlignment         = Enum.TextXAlignment.Left
+pingLabel.Text                   = "connecté"
+pingLabel.ZIndex                 = 12
+pingLabel.Parent                 = sbPingWrapper
+
+task.spawn(function()
+    while pingDot and pingDot.Parent do
+        TweenService:Create(pingDot,
+            TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            { BackgroundTransparency = 0.7, Size = UDim2.new(0, 5, 0, 5) }):Play()
+        task.wait(0.7)
+        TweenService:Create(pingDot,
+            TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+            { BackgroundTransparency = 0, Size = UDim2.new(0, 8, 0, 8) }):Play()
+        task.wait(0.7)
+    end
+end)
+
+-- ─── CONTENT AREA ─────────────────────────────────────────────────────────────
+
+local ContentWrapper = Instance.new("Frame")
+ContentWrapper.Size             = UDim2.new(1, -172, 1, -16)
+ContentWrapper.Position         = UDim2.new(0, 168, 0, 8)
+ContentWrapper.BackgroundColor3 = baseColors.background
+ContentWrapper.BorderSizePixel  = 0
+ContentWrapper.ClipsDescendants = true
+ContentWrapper.Parent           = MainFrame
+
+local cwCorner = Instance.new("UICorner")
+cwCorner.CornerRadius = UDim.new(0, 10)
+cwCorner.Parent       = ContentWrapper
+
+local cwStroke = Instance.new("UIStroke")
+cwStroke.Thickness = 1.5
+cwStroke.Parent    = ContentWrapper
+addRainbow(cwStroke, "Color")
+
+-- Content header (page title)
+local ContentHeader = Instance.new("Frame")
+ContentHeader.Size             = UDim2.new(1, 0, 0, 46)
+ContentHeader.BackgroundColor3 = Color3.fromRGB(14, 14, 22)
+ContentHeader.BorderSizePixel  = 0
+ContentHeader.ZIndex           = 8
+ContentHeader.Parent           = ContentWrapper
+
+local chTitle = Instance.new("TextLabel")
+chTitle.Size                   = UDim2.new(1, -60, 1, 0)
+chTitle.Position               = UDim2.new(0, 16, 0, 0)
+chTitle.BackgroundTransparency = 1
+chTitle.Font                   = Enum.Font.GothamBold
+chTitle.TextSize               = 20
+chTitle.TextColor3             = baseColors.text
+chTitle.TextXAlignment         = Enum.TextXAlignment.Left
+chTitle.Text                   = "🏠  Accueil"
+chTitle.ZIndex                 = 9
+chTitle.Parent                 = ContentHeader
+addRainbow(chTitle, "TextColor3")
+
+local chLine = Instance.new("Frame")
+chLine.Size             = UDim2.new(1, 0, 0, 2)
+chLine.Position         = UDim2.new(0, 0, 1, -2)
+chLine.BackgroundColor3 = baseColors.accent
+chLine.BorderSizePixel  = 0
+chLine.ZIndex           = 9
+chLine.Parent           = ContentHeader
+addRainbow(chLine, "BackgroundColor3")
+
+-- Close button in content header
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size             = UDim2.new(0, 30, 0, 30)
+closeBtn.Position         = UDim2.new(1, -38, 0.5, -15)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeBtn.BorderSizePixel  = 0
+closeBtn.Font             = Enum.Font.GothamBold
+closeBtn.TextSize         = 20
+closeBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+closeBtn.Text             = "×"
+closeBtn.AutoButtonColor  = false
+closeBtn.ZIndex           = 10
+closeBtn.ClipsDescendants = true
+closeBtn.Parent           = ContentHeader
+addHoverScale(closeBtn)
+addRipple(closeBtn)
+local cbCorner = Instance.new("UICorner")
+cbCorner.CornerRadius = UDim.new(0, 6)
+cbCorner.Parent       = closeBtn
+
+local ContentFrame = Instance.new("ScrollingFrame")
+ContentFrame.Size                  = UDim2.new(1, 0, 1, -48)
+ContentFrame.Position              = UDim2.new(0, 0, 0, 48)
+ContentFrame.CanvasSize            = UDim2.new(0, 0, 0, 0)
+ContentFrame.AutomaticCanvasSize   = Enum.AutomaticSize.Y
+ContentFrame.ScrollBarThickness    = 4
+ContentFrame.ScrollBarImageColor3  = baseColors.accent
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel       = 0
+ContentFrame.ClipsDescendants      = true
+ContentFrame.Parent                = ContentWrapper
+
+-- ─── TAB SYSTEM ───────────────────────────────────────────────────────────────
+
+local selectedTabButton   = nil
+local tabTransitionActive = false
+
+local function clearContent()
+    for _, child in ipairs(ContentFrame:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+end
+
+local function selectTab(button, contentFunc, tabLabel)
+    if tabTransitionActive then return end
+    tabTransitionActive = true
+
+    if chTitle then chTitle.Text = tabLabel or "  " end
+
+    if selectedTabButton and selectedTabButton ~= button then
+        selectedTabButton.BackgroundColor3    = Color3.fromRGB(0,0,0)
+        selectedTabButton.BackgroundTransparency = 0.7
+        for _, ch in ipairs(selectedTabButton:GetChildren()) do
+            if ch:IsA("Frame") and ch.Name == "ActiveBar" then ch:Destroy() end
+        end
+    end
+
+    selectedTabButton = button
+    TweenService:Create(button,
+        TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+        { BackgroundColor3 = baseColors.accent, BackgroundTransparency = 0 }):Play()
+
+    -- Active left-side bar
+    local activeBar = button:FindFirstChild("ActiveBar") or Instance.new("Frame")
+    activeBar.Name             = "ActiveBar"
+    activeBar.Size             = UDim2.new(0, 3, 0.7, 0)
+    activeBar.Position         = UDim2.new(0, 0, 0.15, 0)
+    activeBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    activeBar.BorderSizePixel  = 0
+    activeBar.ZIndex           = button.ZIndex + 1
+    activeBar.Parent           = button
+    addRainbow(activeBar, "BackgroundColor3")
+    local abCorner = Instance.new("UICorner")
+    abCorner.CornerRadius = UDim.new(0, 2)
+    abCorner.Parent       = activeBar
+
+    local fadeOut = TweenService:Create(ContentFrame,
+        TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+        { Position = UDim2.new(0.06, 0, 0, 48) })
+    fadeOut:Play()
+    fadeOut.Completed:Wait()
+
+    clearContent()
+    contentFunc()
+    ContentFrame.Position = UDim2.new(-0.06, 0, 0, 48)
+
+    local fadeIn = TweenService:Create(ContentFrame,
+        TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        { Position = UDim2.new(0, 0, 0, 48) })
+    fadeIn:Play()
+    fadeIn.Completed:Wait()
+    tabTransitionActive = false
+end
+
+local function createSidebarButton(icon, label, order)
+    local btn = Instance.new("TextButton")
+    btn.Size                   = UDim2.new(1, 0, 0, 42)
+    btn.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
+    btn.BackgroundTransparency = 0.7
+    btn.BorderSizePixel        = 0
+    btn.Font                   = Enum.Font.GothamSemibold
+    btn.TextSize               = 14
+    btn.TextColor3             = baseColors.subtext
+    btn.TextXAlignment         = Enum.TextXAlignment.Left
+    btn.Text                   = "   " .. icon .. "  " .. label
+    btn.AutoButtonColor        = false
+    btn.LayoutOrder            = order
+    btn.ClipsDescendants       = true
+    btn.ZIndex                 = 11
+    btn.Parent                 = SidebarNav
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 8)
+    c.Parent       = btn
+    addRipple(btn)
+    btn.MouseEnter:Connect(function()
+        if btn ~= selectedTabButton then
+            TweenService:Create(btn,
+                TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+                { BackgroundTransparency = 0.5, TextColor3 = baseColors.text }):Play()
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        if btn ~= selectedTabButton then
+            TweenService:Create(btn,
+                TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+                { BackgroundTransparency = 0.7, TextColor3 = baseColors.subtext }):Play()
+        end
+    end)
+    return btn
+end
+
+-- ─── MENU ANIMATIONS ──────────────────────────────────────────────────────────
+
+local function openMenuAnimation()
+    task.spawn(function()
+        MainFrame.Size                   = UDim2.new(0, 680, 0, 480)
+        MainFrame.Position               = UDim2.new(0.5, 0, 0.62, 0)
+        MainFrame.BackgroundTransparency = 1
+        MainFrame.Visible                = true
+        menuOpen                         = true
+
+        TweenService:Create(MainFrame,
+            TweenInfo.new(0.38, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            { BackgroundTransparency = 0 }):Play()
+        local up = TweenService:Create(MainFrame,
+            TweenInfo.new(0.52, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 740, 0, 520) })
+        up:Play()
+        up.Completed:Wait()
+        spawnParticles(MainFrame)
+    end)
+end
+
+local function closeMenuAnimation()
+    task.spawn(function()
+        menuOpen = false
+        local down = TweenService:Create(MainFrame,
+            TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+            { BackgroundTransparency = 1,
+              Position = UDim2.new(0.5, 0, 0.62, 0),
+              Size     = UDim2.new(0, 680, 0, 480) })
+        down:Play()
+        down.Completed:Wait()
+        MainFrame.Visible  = false
+        MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+        MainFrame.Size     = UDim2.new(0, 740, 0, 520)
+    end)
+end
+
+closeBtn.MouseButton1Click:Connect(closeMenuAnimation)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not menuUnlocked then return end
+    if input.KeyCode == toggleKey then
+        if menuOpen then closeMenuAnimation() else openMenuAnimation() end
+    end
+end)
+
+-- ─── CONTENT HELPERS ──────────────────────────────────────────────────────────
+
+local function makeLayout()
+    local l = Instance.new("UIListLayout")
+    l.Padding   = UDim.new(0, 8)
+    l.SortOrder = Enum.SortOrder.LayoutOrder
+    l.Parent    = ContentFrame
+    local p = Instance.new("UIPadding")
+    p.PaddingLeft   = UDim.new(0, 10)
+    p.PaddingTop    = UDim.new(0, 10)
+    p.PaddingRight  = UDim.new(0, 10)
+    p.PaddingBottom = UDim.new(0, 10)
+    p.Parent        = ContentFrame
+end
+
+-- Section label
+local function makeSectionLabel(text, order)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size                   = UDim2.new(1, 0, 0, 20)
+    lbl.BackgroundTransparency = 1
+    lbl.Font                   = Enum.Font.GothamBold
+    lbl.TextSize               = 11
+    lbl.TextColor3             = baseColors.subtext
+    lbl.TextXAlignment         = Enum.TextXAlignment.Left
+    lbl.Text                   = "  " .. string.upper(text)
+    lbl.LayoutOrder            = order
+    lbl.ZIndex                 = 6
+    lbl.Parent                 = ContentFrame
+    return lbl
+end
+
+local function safeLoad(btn, originalText, url, useCache)
+    if not btn then return end
+    btn.Text   = "⏳  Chargement..."
+    btn.Active = false
+
+    local bar = Instance.new("Frame")
+    bar.Size                   = UDim2.new(0, 0, 1, 0)
+    bar.BackgroundColor3       = Color3.fromRGB(255, 255, 255)
+    bar.BackgroundTransparency = 0.7
+    bar.BorderSizePixel        = 0
+    bar.ZIndex                 = btn.ZIndex + 1
+    bar.Parent                 = btn
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0, 6)
+    bc.Parent       = bar
+
+    TweenService:Create(bar,
+        TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+        { Size = UDim2.new(1, 0, 1, 0) }):Play()
+
+    task.spawn(function()
+        local ok, result = pcall(function()
+            return loadstring(game:HttpGet(url, useCache))()
+        end)
+        task.wait(0.4)
+        if btn and btn.Parent then
+            btn.Text   = originalText
+            btn.Active = true
+            for _, ch in ipairs(btn:GetChildren()) do
+                if ch:IsA("Frame") then ch:Destroy() end
+            end
+        end
+        showToast(
+            ok and ("✓  " .. originalText:gsub("[^%a%s]",""):gsub("^%s+","") .. " lancé !")
+               or "✗  Erreur de chargement",
+            ok and baseColors.success or baseColors.error
+        )
+        if not ok then warn("[SinixOnTop] " .. tostring(result)) end
+    end)
+end
+
+local function createScriptButton(icon, name, url, useCache, order, badge)
+    local wrapper = Instance.new("Frame")
+    wrapper.Size             = UDim2.new(1, 0, 0, 54)
+    wrapper.BackgroundColor3 = baseColors.button
+    wrapper.BorderSizePixel  = 0
+    wrapper.LayoutOrder      = order or 0
+    wrapper.ClipsDescendants = true
+    wrapper.ZIndex           = 5
+    wrapper.Parent           = ContentFrame
+
+    local wc = Instance.new("UICorner")
+    wc.CornerRadius = UDim.new(0, 8)
+    wc.Parent       = wrapper
+
+    local wStroke = Instance.new("UIStroke")
+    wStroke.Thickness = 1
+    wStroke.Color     = Color3.fromRGB(60, 60, 80)
+    wStroke.Parent    = wrapper
+
+    -- Icon frame
+    local iconFrame = Instance.new("Frame")
+    iconFrame.Size             = UDim2.new(0, 40, 0, 40)
+    iconFrame.Position         = UDim2.new(0, 8, 0.5, -20)
+    iconFrame.BackgroundColor3 = Color3.fromRGB(30, 28, 48)
+    iconFrame.BorderSizePixel  = 0
+    iconFrame.ZIndex           = 6
+    iconFrame.Parent           = wrapper
+    local ifc = Instance.new("UICorner")
+    ifc.CornerRadius = UDim.new(0, 8)
+    ifc.Parent       = iconFrame
+
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Size                   = UDim2.new(1, 0, 1, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.Font                   = Enum.Font.GothamBold
+    iconLbl.TextSize               = 22
+    iconLbl.Text                   = icon
+    iconLbl.ZIndex                 = 7
+    iconLbl.Parent                 = iconFrame
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size                   = UDim2.new(1, -68, 0, 22)
+    nameLbl.Position               = UDim2.new(0, 58, 0, 8)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Font                   = Enum.Font.GothamBold
+    nameLbl.TextSize               = 15
+    nameLbl.TextColor3             = baseColors.text
+    nameLbl.TextXAlignment         = Enum.TextXAlignment.Left
+    nameLbl.Text                   = name
+    nameLbl.ZIndex                 = 6
+    nameLbl.Parent                 = wrapper
+
+    local subLbl = Instance.new("TextLabel")
+    subLbl.Size                   = UDim2.new(1, -68, 0, 16)
+    subLbl.Position               = UDim2.new(0, 58, 0, 30)
+    subLbl.BackgroundTransparency = 1
+    subLbl.Font                   = Enum.Font.Gotham
+    subLbl.TextSize               = 11
+    subLbl.TextColor3             = baseColors.subtext
+    subLbl.TextXAlignment         = Enum.TextXAlignment.Left
+    subLbl.Text                   = url and "Cliquer pour lancer" or "Bientôt disponible"
+    subLbl.ZIndex                 = 6
+    subLbl.Parent                 = wrapper
+
+    if badge then
+        local badgeLbl = Instance.new("TextLabel")
+        badgeLbl.Size             = UDim2.new(0, 0, 0, 18)
+        badgeLbl.AutomaticSize    = Enum.AutomaticSize.X
+        badgeLbl.Position         = UDim2.new(1, -10, 0, 8)
+        badgeLbl.AnchorPoint      = Vector2.new(1, 0)
+        badgeLbl.BackgroundColor3 = baseColors.success
+        badgeLbl.BorderSizePixel  = 0
+        badgeLbl.Font             = Enum.Font.GothamBold
+        badgeLbl.TextSize         = 10
+        badgeLbl.TextColor3       = Color3.fromRGB(255, 255, 255)
+        badgeLbl.Text             = "  " .. badge .. "  "
+        badgeLbl.ZIndex           = 7
+        badgeLbl.Parent           = wrapper
+        local badgeCorner = Instance.new("UICorner")
+        badgeCorner.CornerRadius = UDim.new(0, 4)
+        badgeCorner.Parent       = badgeLbl
+    end
+
+    -- Clickable overlay button
+    local btn = Instance.new("TextButton")
+    btn.Size                   = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.BorderSizePixel        = 0
+    btn.Text                   = ""
+    btn.ZIndex                 = 8
+    btn.ClipsDescendants       = true
+    btn.Parent                 = wrapper
+    addRipple(btn)
+
+    wrapper.MouseEnter:Connect(function()
+        TweenService:Create(wrapper,
+            TweenInfo.new(0.18, Enum.EasingStyle.Quad),
+            { BackgroundColor3 = baseColors.buttonHov }):Play()
+        TweenService:Create(wStroke,
+            TweenInfo.new(0.18, Enum.EasingStyle.Quad),
+            { Color = baseColors.accent }):Play()
+    end)
+    wrapper.MouseLeave:Connect(function()
+        TweenService:Create(wrapper,
+            TweenInfo.new(0.18, Enum.EasingStyle.Quad),
+            { BackgroundColor3 = baseColors.button }):Play()
+        TweenService:Create(wStroke,
+            TweenInfo.new(0.18, Enum.EasingStyle.Quad),
+            { Color = Color3.fromRGB(60, 60, 80) }):Play()
+    end)
+
+    btn.MouseButton1Click:Connect(function()
+        if not btn.Active then return end
+        if url then
+            btn.Active = false
+            subLbl.Text = "⏳  Chargement..."
+            task.spawn(function()
+                local ok, result = pcall(function()
+                    return loadstring(game:HttpGet(url, useCache))()
+                end)
+                task.wait(0.4)
+                if btn and btn.Parent then
+                    btn.Active  = true
+                    subLbl.Text = ok and "✓  Lancé avec succès" or "✗  Erreur"
+                end
+                showToast(
+                    ok and ("✓  " .. name .. " lancé !")
+                       or "✗  Erreur de chargement",
+                    ok and baseColors.success or baseColors.error
+                )
+                if not ok then warn("[SinixOnTop] " .. tostring(result)) end
+            end)
+        else
+            showToast("⚠  " .. name .. " — bientôt disponible", baseColors.warning)
+        end
+    end)
+
+    return wrapper
+end
+
+-- ─── TAB CONTENTS ─────────────────────────────────────────────────────────────
+
+local function homeContent()
+    makeLayout()
+
+    -- Welcome card
+    local card = Instance.new("Frame")
+    card.Size             = UDim2.new(1, 0, 0, 90)
+    card.BackgroundColor3 = Color3.fromRGB(26, 22, 46)
+    card.BorderSizePixel  = 0
+    card.LayoutOrder      = 1
+    card.ZIndex           = 5
+    card.Parent           = ContentFrame
+    local cardCorner = Instance.new("UICorner")
+    cardCorner.CornerRadius = UDim.new(0, 10)
+    cardCorner.Parent = card
+    local cardStroke = Instance.new("UIStroke")
+    cardStroke.Thickness = 1.5
+    cardStroke.Parent = card
+    addRainbow(cardStroke, "Color")
+    local cardGrad = Instance.new("UIGradient")
+    cardGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 30, 70)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 16, 34)),
+    })
+    cardGrad.Rotation = 135
+    cardGrad.Parent = card
+
+    local welcomeTitle = Instance.new("TextLabel")
+    welcomeTitle.Size                   = UDim2.new(1, -20, 0, 36)
+    welcomeTitle.Position               = UDim2.new(0, 14, 0, 10)
+    welcomeTitle.BackgroundTransparency = 1
+    welcomeTitle.Font                   = Enum.Font.GothamBold
+    welcomeTitle.TextSize               = 20
+    welcomeTitle.TextColor3             = Color3.fromRGB(255, 255, 255)
+    welcomeTitle.TextXAlignment         = Enum.TextXAlignment.Left
+    welcomeTitle.Text                   = "Bienvenue dans SinixOnTop ✦"
+    welcomeTitle.ZIndex                 = 6
+    welcomeTitle.Parent                 = card
+    addRainbow(welcomeTitle, "TextColor3")
+
+    local welcomeSub = Instance.new("TextLabel")
+    welcomeSub.Size                   = UDim2.new(1, -20, 0, 36)
+    welcomeSub.Position               = UDim2.new(0, 14, 0, 44)
+    welcomeSub.BackgroundTransparency = 1
+    welcomeSub.Font                   = Enum.Font.Gotham
+    welcomeSub.TextSize               = 13
+    welcomeSub.TextColor3             = baseColors.subtext
+    welcomeSub.TextXAlignment         = Enum.TextXAlignment.Left
+    welcomeSub.TextWrapped            = true
+    welcomeSub.Text                   = "Version 3.1  •  Rejoins le Discord pour des mises à jour et du support."
+    welcomeSub.ZIndex                 = 6
+    welcomeSub.Parent                 = card
+
+    -- Stats row
+    local statsRow = Instance.new("Frame")
+    statsRow.Size                   = UDim2.new(1, 0, 0, 60)
+    statsRow.BackgroundTransparency = 1
+    statsRow.LayoutOrder            = 2
+    statsRow.ZIndex                 = 5
+    statsRow.Parent                 = ContentFrame
+    local srLayout = Instance.new("UIListLayout")
+    srLayout.FillDirection = Enum.FillDirection.Horizontal
+    srLayout.Padding       = UDim.new(0, 8)
+    srLayout.SortOrder     = Enum.SortOrder.LayoutOrder
+    srLayout.Parent        = statsRow
+
+    local statData = {
+        { icon = "📜", val = "6",  label = "Scripts"  },
+        { icon = "👑", val = "2",  label = "Admin"    },
+        { icon = "🔧", val = "2",  label = "Utils"    },
+    }
+    for i, s in ipairs(statData) do
+        local statCard = Instance.new("Frame")
+        statCard.Size             = UDim2.new(0, 0, 1, 0)
+        statCard.AutomaticSize    = Enum.AutomaticSize.X
+        statCard.BackgroundColor3 = baseColors.button
+        statCard.BorderSizePixel  = 0
+        statCard.LayoutOrder      = i
+        statCard.ZIndex           = 6
+        statCard.Parent           = statsRow
+        local scc = Instance.new("UICorner")
+        scc.CornerRadius = UDim.new(0, 8)
+        scc.Parent = statCard
+        local scPad = Instance.new("UIPadding")
+        scPad.PaddingLeft  = UDim.new(0, 14)
+        scPad.PaddingRight = UDim.new(0, 14)
+        scPad.Parent       = statCard
+        local scLayout = Instance.new("UIListLayout")
+        scLayout.FillDirection = Enum.FillDirection.Horizontal
+        scLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        scLayout.Padding = UDim.new(0, 6)
+        scLayout.Parent = statCard
+        local scIcon = Instance.new("TextLabel")
+        scIcon.Size = UDim2.new(0, 22, 1, 0)
+        scIcon.BackgroundTransparency = 1
+        scIcon.Font = Enum.Font.GothamBold
+        scIcon.TextSize = 18
+        scIcon.Text = s.icon
+        scIcon.ZIndex = 7
+        scIcon.Parent = statCard
+        local scText = Instance.new("TextLabel")
+        scText.Size = UDim2.new(0, 0, 1, 0)
+        scText.AutomaticSize = Enum.AutomaticSize.X
+        scText.BackgroundTransparency = 1
+        scText.Font = Enum.Font.GothamBold
+        scText.TextSize = 14
+        scText.TextColor3 = baseColors.text
+        scText.Text = s.val .. " " .. s.label
+        scText.ZIndex = 7
+        scText.Parent = statCard
+    end
+
+    -- Discord button
+    local discordBtn = Instance.new("TextButton")
+    discordBtn.Size             = UDim2.new(0.55, 0, 0, 44)
+    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    discordBtn.BorderSizePixel  = 0
+    discordBtn.Font             = Enum.Font.GothamBold
+    discordBtn.TextSize         = 16
+    discordBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+    discordBtn.Text             = "💬  Rejoindre Discord"
+    discordBtn.AutoButtonColor  = false
+    discordBtn.LayoutOrder      = 3
+    discordBtn.ClipsDescendants = true
+    discordBtn.Parent           = ContentFrame
+    addHoverScale(discordBtn)
+    addRipple(discordBtn)
+    local dc = Instance.new("UICorner")
+    dc.CornerRadius = UDim.new(0, 8)
+    dc.Parent       = discordBtn
+
+    discordBtn.MouseButton1Click:Connect(function()
+        local ok = pcall(function()
+            game:GetService("GuiService"):SetClipboard("https://discord.gg/764AW7aSKS")
+        end)
+        if ok then
+            showToast("✓  Lien Discord copié !", Color3.fromRGB(88, 101, 242))
+            discordBtn.Text = "✓  Copié !"
+            task.wait(2)
+            if discordBtn and discordBtn.Parent then
+                discordBtn.Text = "💬  Rejoindre Discord"
+            end
+        else
+            showToast("discord.gg/764AW7aSKS", baseColors.accent)
+        end
+    end)
+end
+
+local function scriptsContent()
+    makeLayout()
+    makeSectionLabel("jeux populaires", 0)
+    createScriptButton("🍎", "Blox Fruits",
+        "https://raw.githubusercontent.com/flazhy/QuantumOnyx/refs/heads/main/QuantumOnyx.lua",
+        false, 1, "HOT")
+    createScriptButton("🚑", "Emergency Hamburg",
+        "https://dexoreh.com/dexoreh.lua", false, 2)
+    createScriptButton("⚔️", "TSB Script",
+        nil, false, 3, "SOON")
+    createScriptButton("🎯", "Rivals Script",
+        "https://raw.githubusercontent.com/kiciahook/kiciahook/refs/heads/main/loader.luau",
+        false, 4)
+    createScriptButton("🔒", "Prison Life Script",
+        "https://raw.githubusercontent.com/zenss555a/script/refs/heads/main/Prison-Life.lua",
+        true, 5)
+    createScriptButton("⚡", "Attack on Titan Revolution",
+        "https://pastebin.com/raw/qcucSQdE", false, 6)
+end
+
+local function adminContent()
+    makeLayout()
+    makeSectionLabel("outils admin", 0)
+    createScriptButton("♾️", "Infinite Yield",
+        "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source", false, 1, "FREE")
+    createScriptButton("🎟️", "Free GamePass",
+        "https://pastebin.com/raw/8FUnDFcy", false, 2)
+end
+
+local function utilitaireContent()
+    makeLayout()
+    makeSectionLabel("utilitaires", 0)
+    createScriptButton("💃", "Emotes Hub",
+        "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua", false, 1)
+    createScriptButton("💥", "Fling GUI",
+        "https://raw.githubusercontent.com/K1LAS1K/Ultimate-Fling-GUI/main/flingscript.lua", false, 2)
+end
+
+local function settingsContent()
+    makeLayout()
+
+    -- Key bind card
+    local keyCard = Instance.new("Frame")
+    keyCard.Size             = UDim2.new(1, 0, 0, 120)
+    keyCard.BackgroundColor3 = baseColors.button
+    keyCard.BorderSizePixel  = 0
+    keyCard.LayoutOrder      = 1
+    keyCard.ZIndex           = 5
+    keyCard.Parent           = ContentFrame
+    local kcCorner = Instance.new("UICorner")
+    kcCorner.CornerRadius = UDim.new(0, 10)
+    kcCorner.Parent = keyCard
+    local kcStroke = Instance.new("UIStroke")
+    kcStroke.Thickness = 1.5
+    kcStroke.Color     = Color3.fromRGB(60, 60, 80)
+    kcStroke.Parent    = keyCard
+
+    local kcTitle = Instance.new("TextLabel")
+    kcTitle.Size                   = UDim2.new(1, -20, 0, 28)
+    kcTitle.Position               = UDim2.new(0, 14, 0, 10)
+    kcTitle.BackgroundTransparency = 1
+    kcTitle.Font                   = Enum.Font.GothamBold
+    kcTitle.TextSize               = 16
+    kcTitle.TextColor3             = baseColors.text
+    kcTitle.TextXAlignment         = Enum.TextXAlignment.Left
+    kcTitle.Text                   = "⌨️  Touche ouvrir / fermer"
+    kcTitle.ZIndex                 = 6
+    kcTitle.Parent                 = keyCard
+    addRainbow(kcTitle, "TextColor3")
+
+    local curKeyLbl = Instance.new("TextLabel")
+    curKeyLbl.Size                   = UDim2.new(1, -20, 0, 18)
+    curKeyLbl.Position               = UDim2.new(0, 14, 0, 40)
+    curKeyLbl.BackgroundTransparency = 1
+    curKeyLbl.Font                   = Enum.Font.Gotham
+    curKeyLbl.TextSize               = 13
+    curKeyLbl.TextColor3             = baseColors.subtext
+    curKeyLbl.TextXAlignment         = Enum.TextXAlignment.Left
+    curKeyLbl.Text                   = "Actuelle : " .. tostring(toggleKey.Name) .. "   •   Défaut : RightShift"
+    curKeyLbl.ZIndex                 = 6
+    curKeyLbl.Parent                 = keyCard
+
+    local bindBtn = Instance.new("TextButton")
+    bindBtn.Size             = UDim2.new(0, 200, 0, 36)
+    bindBtn.Position         = UDim2.new(0, 14, 0, 68)
+    bindBtn.BackgroundColor3 = baseColors.accent
+    bindBtn.BorderSizePixel  = 0
+    bindBtn.Font             = Enum.Font.GothamBold
+    bindBtn.TextSize         = 14
+    bindBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+    bindBtn.Text             = "🎮  Changer la touche"
+    bindBtn.AutoButtonColor  = false
+    bindBtn.ClipsDescendants = true
+    bindBtn.ZIndex           = 6
+    bindBtn.Parent           = keyCard
+    addHoverScale(bindBtn)
+    addRipple(bindBtn)
+    local bbc = Instance.new("UICorner")
+    bbc.CornerRadius = UDim.new(0, 7)
+    bbc.Parent       = bindBtn
+
+    local listening = false
+    bindBtn.MouseButton1Click:Connect(function()
+        if listening then return end
+        listening    = true
+        bindBtn.Text = "⏳  Appuie sur une touche..."
+        addRainbow(bindBtn, "BackgroundColor3")
+        local conn
+        conn = UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                conn:Disconnect()
+                toggleKey = input.KeyCode
+                listening = false
+                removeRainbow(bindBtn, "BackgroundColor3")
+                bindBtn.BackgroundColor3 = baseColors.accent
+                bindBtn.Text             = "🎮  Changer la touche"
+                curKeyLbl.Text           = "Actuelle : " .. tostring(toggleKey.Name) .. "   •   Défaut : RightShift"
+                showToast("✓  Touche changée : " .. tostring(toggleKey.Name), baseColors.success)
+            end
+        end)
+    end)
+
+    -- Info card
+    local infoCard = Instance.new("Frame")
+    infoCard.Size             = UDim2.new(1, 0, 0, 60)
+    infoCard.BackgroundColor3 = Color3.fromRGB(18, 22, 14)
+    infoCard.BorderSizePixel  = 0
+    infoCard.LayoutOrder      = 2
+    infoCard.ZIndex           = 5
+    infoCard.Parent           = ContentFrame
+    local icCorner = Instance.new("UICorner")
+    icCorner.CornerRadius = UDim.new(0, 10)
+    icCorner.Parent       = infoCard
+    local icStroke = Instance.new("UIStroke")
+    icStroke.Thickness = 1.5
+    icStroke.Color = baseColors.success
+    icStroke.Parent = infoCard
+
+    local icText = Instance.new("TextLabel")
+    icText.Size                   = UDim2.new(1, -20, 1, 0)
+    icText.Position               = UDim2.new(0, 14, 0, 0)
+    icText.BackgroundTransparency = 1
+    icText.Font                   = Enum.Font.Gotham
+    icText.TextSize               = 13
+    icText.TextColor3             = baseColors.success
+    icText.TextXAlignment         = Enum.TextXAlignment.Left
+    icText.TextWrapped            = true
+    icText.Text                   = "✨  Plus de paramètres arrivent bientôt — thèmes, taille, opacité."
+    icText.ZIndex                 = 6
+    icText.Parent                 = infoCard
+end
+
+-- ─── WIRE TABS ────────────────────────────────────────────────────────────────
+
+local tabsData = {
+    { icon = "🏠", name = "Accueil",  label = "🏠  Accueil",  func = homeContent       },
+    { icon = "📜", name = "Scripts",  label = "📜  Scripts",  func = scriptsContent    },
+    { icon = "👑", name = "Admin",    label = "👑  Admin",    func = adminContent      },
+    { icon = "🔧", name = "Utils",    label = "🔧  Utilitaires", func = utilitaireContent },
+    { icon = "⚙️", name = "Réglages", label = "⚙️  Réglages", func = settingsContent   },
+}
+
+local firstTabButton = nil
+local tabButtons     = {}
+for i, tab in ipairs(tabsData) do
+    local btn = createSidebarButton(tab.icon, tab.name, i)
+    tabButtons[i] = btn
+    if i == 1 then firstTabButton = btn end
+    local idx = i
+    btn.MouseButton1Click:Connect(function()
+        selectTab(btn, tab.func, tab.label)
+    end)
+end
+
+-- ─── KEY VALIDATION ───────────────────────────────────────────────────────────
+
+local validating = false
+local function validateKey()
+    if validating then return end
+    validating = true
+
+    local dots = 0
+    local dotConn
+    typingLabel.Text = "Vérification"
+    errorLabel.Text  = ""
+    dotConn = RunService.Heartbeat:Connect(function()
+        dots = (dots + 1) % 4
+        typingLabel.Text = "Vérification" .. string.rep(".", dots)
+    end)
+    task.wait(0.65)
+    dotConn:Disconnect()
+    typingLabel.Text = ""
+
+    local text = inputBox.Text:gsub("%s+", "")
+    if text == KEY then
+        lgStroke.Color = baseColors.success
+        task.wait(0.2)
+        spawnParticles(LoginFrame)
+        task.wait(0.35)
+        local fade = TweenService:Create(LoginFrame,
+            TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+            { BackgroundTransparency = 1, Size = UDim2.new(0, 240, 0, 180) })
+        fade:Play()
+        fade.Completed:Wait()
+        LoginFrame:Destroy()
+        menuUnlocked = true
+        openMenuAnimation()
+        if firstTabButton then
+            selectTab(firstTabButton, tabsData[1].func, tabsData[1].label)
+        end
+        showToast("✓  Accès accordé — bienvenue !", baseColors.success)
+    else
+        validating = false
+        errorLabel.Text = "❌  Clé invalide, réessaye !"
+        local orig = LoginFrame.Position
+        local seq  = { -14, 14, -9, 9, -4, 0 }
+        for _, ox in ipairs(seq) do
+            TweenService:Create(LoginFrame,
+                TweenInfo.new(0.044, Enum.EasingStyle.Linear),
+                { Position = UDim2.new(0.5, ox, 0.5, 0) }):Play()
+            task.wait(0.048)
+        end
+        LoginFrame.Position = orig
+    end
+end
+
+loginButton.MouseButton1Click:Connect(validateKey)
+inputBox.FocusLost:Connect(function(ep) if ep then validateKey() end end)
+
+openLoginFrameAnimation()
